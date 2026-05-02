@@ -1,0 +1,6 @@
+# Eval suite para auto_research. Uma tarefa por linha.
+# Adicione tarefas curtas, cobrindo trivial / standard / complex.
+add a docstring to src/utils/parse.py
+implement the missing `normalize_email` function in src/utils/email.py with tests
+fix the off-by-one bug in src/range_iter.py reported in tests/test_range_iter.py::test_inclusive
+extract `RateLimiter` from src/api/middleware.py into src/services/rate_limiter.py and update imports

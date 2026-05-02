@@ -1,0 +1,130 @@
+# nanoswarm — alias -> modelo + roteamento por (task_type, risk).
+# Trocar de modelo é uma linha. Sem mexer em código.
+
+models:
+  # ── Frontier (planning, judgment, high-risk execution) ────────────────────
+  planner:
+    model: anthropic/claude-opus-4-7
+    max_tokens: 4096
+    temperature: 0.2
+    fallback: openai/gpt-5.5
+  planner_light:
+    model: anthropic/claude-sonnet-4-6
+    max_tokens: 4096
+    temperature: 0.2
+  critic:
+    model: anthropic/claude-haiku-4-5
+    max_tokens: 1024
+    temperature: 0.0
+
+  # ── Triage (cheapest, fast classifier) ────────────────────────────────────
+  triage:
+    model: deepseek/deepseek-v4-flash
+    max_tokens: 512
+    temperature: 0.0
+    fallback: openai/gpt-5.4-nano
+
+  # ── Scout (read-only context mapper) ──────────────────────────────────────
+  scout:
+    model: openrouter/moonshotai/kimi-k2.6
+    max_tokens: 4096
+    temperature: 0.1
+    fallback: openrouter/zai-org/glm-5
+
+  # ── Implementation tiers (executor by risk) ───────────────────────────────
+  implementation_low:
+    model: deepseek/deepseek-v4-flash
+    max_tokens: 4096
+    temperature: 0.3
+    fallback: openrouter/zai-org/glm-4.7-flashx
+  implementation_medium:
+    model: openrouter/moonshotai/kimi-k2.6
+    max_tokens: 8192
+    temperature: 0.2
+    fallback: openrouter/zai-org/glm-5.1
+  implementation_high:
+    model: anthropic/claude-opus-4-7
+    max_tokens: 8192
+    temperature: 0.2
+    fallback: openai/gpt-5.5
+
+  # ── Cross-vendor reviewer pool ────────────────────────────────────────────
+  # Selecionado dinamicamente pelo `reviewer.py` para garantir vendor diferente.
+  reviewer_anthropic:
+    model: anthropic/claude-opus-4-7
+    max_tokens: 2048
+    temperature: 0.0
+  reviewer_openai:
+    model: openai/gpt-5.5
+    max_tokens: 2048
+    temperature: 0.0
+  reviewer_deepseek:
+    model: deepseek/deepseek-v4-pro
+    max_tokens: 2048
+    temperature: 0.0
+
+  # ── Release scribe (PR description writer) ────────────────────────────────
+  scribe:
+    model: openai/gpt-5.4-mini
+    max_tokens: 1024
+    temperature: 0.3
+    fallback: openrouter/zai-org/glm-4.7-flashx
+
+  # ── Local (zero marginal cost) ────────────────────────────────────────────
+  worker_local:
+    model: openai/glm-4.6
+    api_base: ${LOCAL_LLM_BASE_URL}
+    api_key: dummy
+    max_tokens: 8192
+    temperature: 0.2
+
+# Mapeamento provider -> qual reviewer usar (cross-vendor).
+review_pairs:
+  anthropic: reviewer_openai      # ou reviewer_deepseek
+  openai:    reviewer_anthropic
+  deepseek:  reviewer_anthropic
+  moonshot:  reviewer_anthropic   # Kimi -> Claude
+  moonshotai: reviewer_anthropic
+  zai-org:   reviewer_openai      # GLM -> GPT
+  z.ai:      reviewer_openai
+
+# Roteamento por task_type × risk.
+routing:
+  docs:                   { plan: false, executor: implementation_low,    review: optional }
+  tests:                  { plan: false, executor: implementation_medium, review: required_if_test_semantics_change }
+  frontend:               { plan: true,  executor: implementation_medium, review: visual_and_accessibility }
+  backend_feature:        { plan: true,  executor: implementation_medium, review: required }
+  refactor:               { plan: true,  executor: implementation_medium, review: required }
+  bug:                    { plan: true,  executor: implementation_medium, review: required }
+  performance:            { plan: true,  executor: implementation_medium, review: benchmark_required }
+  auth_security_payments: { plan: true,  executor: implementation_high,   review: required_two_models }
+  data_migration:         { plan: true,  executor: implementation_high,   review: required_two_models }
+
+# Heurísticas baratas do router (pré-LLM).
+router:
+  trivial_keywords: [rename, format, docstring, typo, comment, import]
+  complex_threshold_files: 3
+  complex_keywords: [refactor, redesign, migrate, architecture, cross-cutting]
+  ask_triage_when_ambiguous: true
+
+verifier:
+  always_run:
+    - ruff check {files}
+  critic_strictness: normal      # lenient | normal | strict
+  block_on_critic_fail: false    # true em high-stakes
+
+# Política operacional.
+defaults:
+  max_cheap_attempts: 2
+  max_parallel_agents: 4
+  require_worktree_for_parallel_edits: true
+  require_cross_model_review: true
+  stop_on_secret_or_auth_change: true
+  block_auto_merge_on_guardrail: true
+
+memory:
+  dir: .swarm/memory
+
+worktree:
+  base_dir: .swarm/wt
+  branch_prefix: swarm/

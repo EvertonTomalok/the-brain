@@ -1,0 +1,26 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "nanoswarm"
+version = "0.1.0"
+description = "Minimalist multi-model coding agent pipeline"
+requires-python = ">=3.11"
+dependencies = [
+  "litellm>=1.55.0",
+  "pydantic>=2.7",
+  "pyyaml>=6.0",
+  "rich>=13.7",
+  "python-dotenv>=1.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0", "ruff>=0.5", "mypy>=1.10"]
+
+[project.scripts]
+nanoswarm = "nanoswarm.cli:main"
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
