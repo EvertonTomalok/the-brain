@@ -1,33 +1,32 @@
-# nanoswarm
+# the-brain (nanoswarm)
 
-> Pipeline minimalista de agentes para coding (~1k linhas, sem framework).
-> Roteia tarefas por **risco × task_type** com 7 papéis claros, isola em git
-> worktrees, valida com testes + critic + **reviewer cross-vendor**, e escala
-> automaticamente em áreas sensíveis (auth, pagamentos, crypto, migrações…).
+> A minimalist multi-model coding agent pipeline (~1.7k lines, no framework).
+> Routes tasks by **risk × task_type** across 7 explicit roles, isolates work
+> in git worktrees, validates with tests + critic + **cross-vendor reviewer**,
+> and auto-escalates anything touching auth, payments, crypto, migrations, etc.
 
-Inspirado em [`karpathy/nanochat`](https://github.com/karpathy/nanochat) (minimalismo) e [`karpathy/autoresearch`](https://github.com/karpathy/autoresearch) (auto-melhoria mensurável).
-Síntese das melhores práticas de coding agents em maio/2026 (ver [`refs/agent-coding-pipeline-2026.md`](./refs/agent-coding-pipeline-2026.md) e [`ARCHITECTURE.md`](./ARCHITECTURE.md)).
+Inspired by [`karpathy/nanochat`](https://github.com/karpathy/nanochat) (architectural minimalism) and [`karpathy/autoresearch`](https://github.com/karpathy/autoresearch) (autonomous self-improvement against a measurable metric). Synthesizes the state of coding agents as of May 2026 — see [`refs/agent-coding-pipeline-2026.md`](./refs/agent-coding-pipeline-2026.md) and [`ARCHITECTURE.md`](./ARCHITECTURE.md).
 
-## TL;DR de custo
+## TL;DR on cost
 
-100 tarefas de codegen padrão: ~$0.80–1.50 com a pipeline completa (Triage → Scout → Opus planner → Kimi/GLM executor → GPT review). vs ~$15–20 com Opus puro. **~10–25× mais barato, mantendo a qualidade do plano e ganhando review independente.**
+100 standard codegen tasks: **~$0.80–1.50** with the full pipeline (Triage → Scout → Opus planner → Kimi/GLM executor → GPT review) vs ~$15–20 with pure Opus. **~10–25× cheaper while keeping plan quality and gaining independent review.**
 
-## Pipeline em 7 papéis
+## Pipeline in 7 roles
 
 ```
 issue → triage → scout → planner → executor → verifier → reviewer (cross-vendor) → scribe → PR
 ```
 
-| Papel             | Modelo (default)                  | Custo  | Por quê                                                |
-| ----------------- | --------------------------------- | ------ | ------------------------------------------------------ |
-| triage            | `deepseek-v4-flash`               | mínimo | classifica `task_type` + `risk` em <500 tokens         |
-| context-scout     | `kimi-k2.6` (read-only)           | baixo  | mapeia repo, símbolos, padrões, riscos                 |
-| planner           | `claude-opus-4-7`                 | alto   | plano com write-set + acceptance executável            |
-| executor (med)    | `kimi-k2.6` ou `glm-5.1`          | baixo  | implementa em worktree isolado                         |
-| executor (high)   | `claude-opus-4-7` ou `gpt-5.5`    | alto   | só em high-risk ou guardrails                          |
-| verifier          | testes + ruff + `claude-haiku-4-5`| mínimo | fast-path determinístico + critic sobre diff           |
-| reviewer cross-V  | vendor ≠ executor (auto-pick)     | médio  | review honesto, evita bias do mesmo treinamento        |
-| release scribe    | `gpt-5.4-mini`                    | mínimo | gera `PR_BODY.md` com riscos residuais                 |
+| Role              | Default model                       | Cost    | Why                                                       |
+| ----------------- | ----------------------------------- | ------- | --------------------------------------------------------- |
+| triage            | `deepseek-v4-flash`                 | minimal | classifies `task_type` + `risk` in <500 tokens            |
+| context-scout     | `kimi-k2.6` (read-only)             | low     | maps the repo: symbols, patterns, risks                   |
+| planner           | `claude-opus-4-7`                   | high    | plan with explicit write-set + executable acceptance      |
+| executor (med)    | `kimi-k2.6` or `glm-5.1`            | low     | implements in an isolated worktree                        |
+| executor (high)   | `claude-opus-4-7` or `gpt-5.5`      | high    | only for high-risk subtasks or guardrail hits             |
+| verifier          | tests + ruff + `claude-haiku-4-5`   | minimal | deterministic fast-path + critic over the diff            |
+| reviewer cross-V  | vendor ≠ executor (auto-picked)     | medium  | honest review, avoids same-vendor training bias           |
+| release scribe    | `gpt-5.4-mini`                      | minimal | writes `PR_BODY.md` with residual risks                   |
 
 ## Quickstart
 
@@ -35,73 +34,93 @@ issue → triage → scout → planner → executor → verifier → reviewer (c
 pip install -e .
 cp .env.example .env  # ANTHROPIC_API_KEY, OPENROUTER_API_KEY, DEEPSEEK_API_KEY…
 
-# Tarefa única (pipeline completo)
+# Single task — full pipeline
 python -m nanoswarm "extract UserService from src/legacy/users.py and update call sites"
 
-# Codegen massivo (Kimi K2.6 Agent Swarm)
+# Bulk codegen (uses Kimi K2.6 Agent Swarm)
 python examples/codegen_components.py specs/*.json
 
-# Auto-research overnight (Karpathy-style)
+# Karpathy-style overnight auto-research
 python -m nanoswarm.auto_research --hours 8
 ```
 
-## Estrutura
+## Layout
 
 ```
 nanoswarm/
-  gateway.py        litellm wrapper, fallbacks, custo
-  router.py         (task_type, risk) -> alias
-  triage.py         classificador barato em 1 chamada
+  gateway.py        litellm wrapper, fallbacks, cost tracking
+  router.py         (task_type, risk) -> model alias
+  triage.py         cheap classifier (one call)
   scout.py          read-only context mapper
-  planner.py        Claude/GPT decompõe em subtasks
-  worker.py         executa subtask em worktree isolado
-  verifier.py       testes + lint + critic Haiku (fast-path)
-  reviewer.py       cross-vendor reviewer (1 ou 2)
-  guardrails.py     padrões de escalação automática
-  release_scribe.py gera PR_BODY
-  memory.py         arquivos planos: facts/decisions/spend
+  planner.py        Claude/GPT decomposes into subtasks
+  worker.py         executes a subtask inside an isolated worktree
+  verifier.py       tests + lint + Haiku critic (fast-path)
+  reviewer.py       cross-vendor reviewer (1 or 2)
+  guardrails.py     auto-escalation patterns
+  release_scribe.py generates PR_BODY
+  memory.py         flat files: facts/decisions/spend
   worktree.py       git worktree helpers
-  orchestrator.py   laço principal
-  auto_research.py  busca configs Pareto-ótimas
+  orchestrator.py   main loop
+  auto_research.py  searches for Pareto-optimal configs
 prompts/            planner, scout, reviewer, critic
-config.yaml         modelos + roteamento + guardrails
-AGENTS.md           contrato pra qualquer agente no repo-alvo
+config.yaml         models + routing + guardrails
+AGENTS.md           contract for any agent operating in the target repo
 ```
 
-## Cross-vendor review (por que importa)
+## Cross-vendor review (why it matters)
 
-Mesmo fornecedor compartilha viés de treinamento. Opus revisando Opus deixa passar buracos sistemáticos. nanoswarm escolhe automaticamente um reviewer de **outro fornecedor**:
+Models from the same vendor share training biases. Opus reviewing Opus lets the same systematic blind spots through. nanoswarm automatically picks a reviewer from a **different vendor**:
 
-| Executor                   | Reviewer (default)         |
-| -------------------------- | -------------------------- |
-| Claude (Anthropic)         | GPT-5.5 (OpenAI)           |
-| GPT-5.5 (OpenAI)           | Claude Opus (Anthropic)    |
-| DeepSeek V4-Pro            | Claude Opus (Anthropic)    |
-| Kimi K2.6 (Moonshot)       | Claude Opus (Anthropic)    |
-| GLM-5.1 (Z.AI)             | GPT-5.5 (OpenAI)           |
+| Executor                   | Default reviewer              |
+| -------------------------- | ----------------------------- |
+| Claude (Anthropic)         | GPT-5.5 (OpenAI)              |
+| GPT-5.5 (OpenAI)           | Claude Opus (Anthropic)       |
+| DeepSeek V4-Pro            | Claude Opus (Anthropic)       |
+| Kimi K2.6 (Moonshot)       | Claude Opus (Anthropic)       |
+| GLM-5.1 (Z.AI)             | GPT-5.5 (OpenAI)              |
 
-Em high-stakes (auth/payments/migration), exige **dois reviewers cross-vendor**.
+For high-stakes work (auth/payments/migration), **two cross-vendor reviewers are required**.
 
-## Guardrails de escalação automática
+## Auto-escalation guardrails
 
-Padrões em `guardrails.py` — se a tarefa, files ou diff mencionarem qualquer um:
+Patterns in `guardrails.py` — if the task description, file paths, or resulting diff mention any of these:
 
 `auth · payments · crypto · multitenant · secrets · migration · infra · concurrency · deletion · compliance`
 
-→ `risk=high`, executor frontier, 2 reviewers, **auto-merge bloqueado**.
+→ `risk=high`, frontier executor, two reviewers, **auto-merge blocked** (manual review required).
 
-## Karpathy loop (opcional)
+## Karpathy loop (optional)
 
-`auto_research.py` deixa um meta-agente variando configs (thresholds do router, escolhas de executor, strictness do critic) e medindo contra `eval/tasks.txt`. Salva Pareto-front em `(pass_rate, cost, wall_time)`. Mesma ideia de [`karpathy/autoresearch`](https://github.com/karpathy/autoresearch) — agente descobre melhorias sozinho durante a noite.
+`auto_research.py` runs a meta-agent that varies configs (router thresholds, executor choices per tier, critic strictness) and measures them against `eval/tasks.txt`. It saves the Pareto front in `(pass_rate, cost, wall_time)` to `.swarm/research/results.jsonl`. Same idea as [`karpathy/autoresearch`](https://github.com/karpathy/autoresearch) — agents discover improvements on their own overnight.
 
-## Trocar modelo é uma linha
+## Switching models is one line
 
-Tudo em `config.yaml`. Quer testar GPT-5.5 como planner? Mude `models.planner.model`. Quer Kimi como executor padrão? Mude `models.implementation_medium.model`. Sem tocar código.
+Everything lives in `config.yaml`. Want to test GPT-5.5 as planner? Change `models.planner.model`. Want Kimi as the default executor? Change `models.implementation_medium.model`. No code changes.
 
-## Próximos passos
+## Models supported (May 2026)
 
-Ver [`ARCHITECTURE.md`](./ARCHITECTURE.md) para racional completo, comparações de modelos (DeepSeek V4 / GLM-5.1 / Kimi K2.6 / Claude 4-7 / GPT-5.5), tabela de custos, plano de adoção em 7 dias e o MVP de 5 agentes.
+**Frontier** (planning, judgment, high-risk execution)
+- `claude-opus-4-7`, `claude-opus-4-6`, `claude-sonnet-4-6`
+- `gpt-5.5`, `gpt-5.5-pro`, `gpt-5.3-codex`
+
+**Capable & cheap** (default executors)
+- `kimi-k2.6` — 256k ctx, JSON, tool calls, Anthropic-compatible endpoint, Agent Swarm (up to 300 sub-agents)
+- `glm-5.1` — 200k ctx, 128k output, Z.AI flagship for long-horizon coding
+- `glm-4.6` — 200k ctx, 82.8% LCB v6, ~30% more token-efficient than 4.5
+- `deepseek-v4-pro` — 1M ctx, 80.6% SWE-bench (statistically tied with Opus 4.7)
+
+**Fast & cheap** (triage, fixer, scout, batch)
+- `deepseek-v4-flash`, `glm-4.7-flashx`, `gpt-5.4-mini`, `gpt-5.4-nano`
+
+**Critic / fast-path judge**
+- `claude-haiku-4-5`, `gpt-5.4-mini`
+
+**Local** — `glm-4.6` or `deepseek-v4-flash` on vLLM/Ollama via `LOCAL_LLM_BASE_URL`.
+
+## Next steps
+
+See [`ARCHITECTURE.md`](./ARCHITECTURE.md) for the full rationale: model comparisons, cost tables, the 7-day adoption plan, and the 5-agent MVP.
 
 ## Status
 
-Proof of concept didático. Para uso em produção, adicionar: rate limiting por chave, sandboxing real do `run()` (Firejail/gVisor), métricas de regressão pós-merge, e revisão humana obrigatória em qualquer task com guardrail acionado.
+Didactic proof of concept. For production use, add: per-key rate limiting, real sandboxing for `run()` (Firejail/gVisor), post-merge regression metrics, and mandatory human review for any task that triggers a guardrail.
